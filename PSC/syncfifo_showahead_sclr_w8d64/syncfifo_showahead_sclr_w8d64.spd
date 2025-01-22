@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<simPackage>
+ <file
+   path="fifo_191/sim/syncfifo_showahead_sclr_w8d64_fifo_191_qw52ykq.v"
+   type="VERILOG"
+   library="syncfifo_showahead_sclr_w8d64_fifo_191" />
+ <file
+   path="sim/syncfifo_showahead_sclr_w8d64.v"
+   type="VERILOG"
+   hasInlineConfiguration="true" />
+ <topLevel name="syncfifo_showahead_sclr_w8d64" />
+ <deviceFamily name="arria10" />
+</simPackage>

@@ -1,0 +1,5 @@
+config syncfifo_showahead_sclr_w8d64_cfg;
+		design syncfifo_showahead_sclr_w8d64;
+		instance syncfifo_showahead_sclr_w8d64.fifo_0 use syncfifo_showahead_sclr_w8d64_fifo_191.syncfifo_showahead_sclr_w8d64_fifo_191_qw52ykq;
+endconfig
+

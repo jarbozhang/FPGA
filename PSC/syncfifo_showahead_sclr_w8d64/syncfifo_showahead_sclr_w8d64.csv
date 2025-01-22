@@ -1,0 +1,18 @@
+# system info syncfifo_showahead_sclr_w8d64 on 2025.01.15.19:45:29
+system_info:
+name,value
+DEVICE,10AX048H1F34E1HG
+DEVICE_FAMILY,Arria 10
+GENERATION_ID,1736941529
+#
+#
+# Files generated for syncfifo_showahead_sclr_w8d64 on 2025.01.15.19:45:29
+files:
+filepath,kind,attributes,module,is_top
+sim/syncfifo_showahead_sclr_w8d64.v,VERILOG,CONTAINS_INLINE_CONFIGURATION,syncfifo_showahead_sclr_w8d64,true
+fifo_191/sim/syncfifo_showahead_sclr_w8d64_fifo_191_qw52ykq.v,VERILOG,,syncfifo_showahead_sclr_w8d64_fifo_191_qw52ykq,false
+#
+# Map from instance-path to kind of module
+instances:
+instancePath,module
+syncfifo_showahead_sclr_w8d64.fifo_0,syncfifo_showahead_sclr_w8d64_fifo_191_qw52ykq
