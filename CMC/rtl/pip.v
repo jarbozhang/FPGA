@@ -24,6 +24,7 @@ parameter TSMP_TYPE_CONFIG = 9'h003;
 reg [1:0] st_current;
 reg [3:0] check_head_counter_reg;
 reg [1:0] check_type_reg;
+reg check_is_tsmp_reg;
 reg [(CHECK_HEAD_LENGTH-1)*DATA_WIDTH-1:0] shift_reg;
 
 reg [DATA_WIDTH-1:0] ov_data_reg;
@@ -37,6 +38,7 @@ always @(posedge i_clk or negedge i_rst_n) begin
         shift_reg <= {(CHECK_HEAD_LENGTH-1)*DATA_WIDTH{1'b0}};
         check_head_counter_reg <= 4'd0;
         check_type_reg <= TSMP_TYPE_NONE;
+        check_is_tsmp_reg <= 1'b0;
     end else begin
         case (st_current)
             IDLE_S: begin
@@ -50,28 +52,29 @@ always @(posedge i_clk or negedge i_rst_n) begin
                     shift_reg <= {(CHECK_HEAD_LENGTH-1)*DATA_WIDTH{1'b0}};
                     check_head_counter_reg <= 4'd0;
                     check_type_reg <= TSMP_TYPE_NONE;
+                    check_is_tsmp_reg <= 1'b0;
                 end
             end
             CHECK_S: begin
-                o_data_wr_reg <= 1'b0;
                 shift_reg <= {shift_reg[((CHECK_HEAD_LENGTH-1)*DATA_WIDTH-1):0], iv_data};
                 if (check_head_counter_reg < CHECK_HEAD_LENGTH - 1) begin // 为了防止最后一拍的时候（第14拍）跳转，会丢失一拍iv_data的问题，所以提前一拍跳转
                     st_current <= CHECK_S;
                     check_head_counter_reg <= check_head_counter_reg + 1;
                 end else begin
+                    check_head_counter_reg <= 4'd0;
+                    st_current <= TRANS_S;
+                    check_type_reg <= shift_reg[((CHECK_HEAD_LENGTH-2)*DATA_WIDTH-1):(CHECK_HEAD_LENGTH-3)*DATA_WIDTH]; //由于是提前一拍跳转，所以需要判断shift_reg的最左侧2-3个byte，来判断TSMP报文的类型
                     if (shift_reg[DATA_WIDTH-1:0] == 9'h0ff && iv_data[DATA_WIDTH-1:0] == 9'h001) begin // 提前一拍跳转，所以需要判断当前iv_data是否为9'h001,来判断是否为TSMP报文
-                        st_current <= TRANS_S;
-                        check_head_counter_reg <= 4'd0;
-                        check_type_reg <= shift_reg[((CHECK_HEAD_LENGTH-2)*DATA_WIDTH-1):(CHECK_HEAD_LENGTH-3)*DATA_WIDTH]; //由于是提前一拍跳转，所以需要判断shift_reg的最左侧2-3个byte，来判断TSMP报文的类型
-                    end else begin
-                        st_current <= TRANS_S; // 不是TSMP报文，但有可能下次碰到的是尾拍的高位1，IDLE_S状态判断会有问题，所以还是需要跳转到TRANS_S继续处理，后续根据check_type_reg来判断输出信号
-                    end
+                        check_is_tsmp_reg <= 1'b1;
+                    end 
                 end
             end
             TRANS_S: begin
                 shift_reg <= {shift_reg[((CHECK_HEAD_LENGTH-1)*DATA_WIDTH-1):0], iv_data};
                 ov_data_reg <= shift_reg[(CHECK_HEAD_LENGTH-1)*DATA_WIDTH-1:(CHECK_HEAD_LENGTH-2)*DATA_WIDTH];
-                o_data_wr_reg <= 1'b1;
+                if (check_is_tsmp_reg == 1'b1) begin
+                    o_data_wr_reg <= 1'b1;
+                end
                 if (iv_data[DATA_WIDTH-1] == 1'b1) begin
                     st_current <= TAIL_S;
                 end else begin
@@ -81,20 +84,34 @@ always @(posedge i_clk or negedge i_rst_n) begin
             TAIL_S: begin
                 shift_reg <= {shift_reg[((CHECK_HEAD_LENGTH-1)*DATA_WIDTH-1):0], iv_data};
                 ov_data_reg <= shift_reg[(CHECK_HEAD_LENGTH-1)*DATA_WIDTH-1:(CHECK_HEAD_LENGTH-2)*DATA_WIDTH];
-                o_data_wr_reg <= 1'b1;
-                    
+                if (check_is_tsmp_reg == 1'b1) begin
+                    o_data_wr_reg <= 1'b1;
+                end
                 if (check_head_counter_reg > 0) begin
                     check_head_counter_reg <= check_head_counter_reg + 1;
                 end else if (iv_data[DATA_WIDTH-1] == 1'b1 && i_data_wr == 1'b1) begin
                     check_head_counter_reg <= 1;
                 end
+                // 此时开始通过这一拍决定跳转到哪个状态
                 if (ov_data_reg[DATA_WIDTH-1] == 1'b1) begin
+                    o_data_wr_reg <= 1'b0;
+                    check_is_tsmp_reg <= 1'b0;
+                    // 如果check_head_counter_reg > 0，则说明shift_reg缓冲区中同时存在前后两个报文(可能紧挨，可能中间间隔几拍)
                     if (check_head_counter_reg > 0) begin
                         st_current <= CHECK_S;
+                        // shift_reg中如果最右侧的值是9'h0ff，同时iv_data的值是9'h001，则说明是TSMP报文
+                        if (shift_reg[DATA_WIDTH-1:0] == 9'h0ff && iv_data[DATA_WIDTH-1:0] == 9'h001) begin // 提前一拍跳转，所以需要判断当前iv_data是否为9'h001,来判断是否为TSMP报文
+                            check_is_tsmp_reg <= 0'b1;
+                            o_data_wr_reg <= 1'b1;
+                            st_current <= TRANS_S;
+                        end
+                        else begin
+                            st_current <= CHECK_S;
+                        end
                     end 
+                    // 用以解决移位寄存器中跳转的同时iv_data新数据到来的情况
                     else if (iv_data[DATA_WIDTH-1] == 1'b1 && i_data_wr == 1'b1) begin
-                        // 用以解决移位寄存器中跳转的同时iv_data新数据到来的情况
-                        st_current <= CHECK_S;
+                        st_current <= CHECK_S; 
                     end 
                     else begin
                         st_current <= IDLE_S;
