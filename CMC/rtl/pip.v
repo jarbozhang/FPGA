@@ -64,8 +64,10 @@ always @(posedge i_clk or negedge i_rst_n) begin
                     check_head_counter_reg <= 4'd0;
                     st_current <= TRANS_S;
                     check_type_reg <= shift_reg[((CHECK_HEAD_LENGTH-2)*DATA_WIDTH-1):(CHECK_HEAD_LENGTH-3)*DATA_WIDTH]; //由于是提前一拍跳转，所以需要判断shift_reg的最左侧2-3个byte，来判断TSMP报文的类型
+                    ov_data_reg <= shift_reg[(CHECK_HEAD_LENGTH-1)*DATA_WIDTH-1:(CHECK_HEAD_LENGTH-2)*DATA_WIDTH];
                     if (shift_reg[DATA_WIDTH-1:0] == 9'h0ff && iv_data[DATA_WIDTH-1:0] == 9'h001) begin // 提前一拍跳转，所以需要判断当前iv_data是否为9'h001,来判断是否为TSMP报文
                         check_is_tsmp_reg <= 1'b1;
+                        o_data_wr_reg <= 1'b1;
                     end 
                 end
             end

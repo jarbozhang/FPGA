@@ -3,7 +3,7 @@
 module pip_tb();
 
   parameter DATA_WIDTH = 9;
-  parameter CLK_PERIOD = 6;
+  parameter CLK_PERIOD = 20;
   parameter INIT_DELAY = 18;  // 添加初始延迟参数
   parameter MAX_SEQ_LENGTH = 64;
 
@@ -11,6 +11,7 @@ module pip_tb();
   reg i_rst_n;
   reg [DATA_WIDTH-1:0] iv_data;
   reg i_data_wr;
+  reg is_tsmp;
   wire [DATA_WIDTH-1:0] ov_data;
   wire o_data_wr;
 
@@ -32,6 +33,7 @@ module pip_tb();
     i_rst_n <= 1'b0;
     i_data_wr <= 1'b0;
     iv_data <= {DATA_WIDTH{1'b0}};
+    is_tsmp <= 1'b0;
     #(CLK_PERIOD) i_rst_n <= 1'b1;
     
     // 等待INIT_DELAY个时钟周期
@@ -52,6 +54,7 @@ module pip_tb();
     iv_data <= 9'h0ff; 
     #(CLK_PERIOD);
     iv_data <= 9'h001; 
+    is_tsmp <= 1'b1;
     #(CLK_PERIOD);
     iv_data <= 9'h000;
     #(CLK_PERIOD);
@@ -80,7 +83,12 @@ module pip_tb();
     #(CLK_PERIOD);
     iv_data <= 9'h001; 
     #(CLK_PERIOD);
-    repeat(10) begin
+    repeat(7) begin
+        iv_data <= 9'h000; 
+        #(CLK_PERIOD);
+    end
+    is_tsmp <= 1'b0;
+    repeat(3) begin
         iv_data <= 9'h000; 
         #(CLK_PERIOD);
     end
@@ -125,6 +133,7 @@ module pip_tb();
     #(CLK_PERIOD);
     iv_data <= 9'h001; 
     #(CLK_PERIOD);
+    is_tsmp <= 1'b1;
     iv_data <= 9'h000;
     #(CLK_PERIOD);
     iv_data <= 9'h000;
@@ -163,6 +172,7 @@ module pip_tb();
     iv_data <= 9'h0ff; 
     #(CLK_PERIOD);
     iv_data <= 9'h001; 
+    is_tsmp <= 1'b1;
     #(CLK_PERIOD);
     iv_data <= 9'h000;
     #(CLK_PERIOD);
@@ -183,8 +193,8 @@ module pip_tb();
     i_data_wr <= 1'b0;  
   
     // 仿真结束等待
-    #(CLK_PERIOD*500);
-    $finish;
+    #(CLK_PERIOD*20);
+    // $finish;
   end
 
   // 添加计数器
@@ -206,11 +216,11 @@ module pip_tb();
     begin
       if (ov_data !== expected_data) begin
         error_count = error_count + 1;
-        $display("**ERROR**: Time=%0t ns: Output data mismatch!", $time);
+        $display("**ERROR**: Time=%0t ps: Output data mismatch!", $time);
         $display("Expected: %h, Got: %h", expected_data, ov_data);
       end else begin
         pass_count = pass_count + 1;
-        $display("PASS: Time=%0t ns: Output data match. Data=%h", $time, ov_data);
+        $display("PASS: Time=%0t ps: Output data match. Data=%h", $time, ov_data);
       end
     end
   endtask
@@ -247,7 +257,7 @@ module pip_tb();
       // 检查写使能信号是否对应
       if (i_data_wr_reg[13] !== 1'b1) begin
         enable_error_count = enable_error_count + 1;
-        $display("**ERROR**: Time=%0t ns: Write enable mismatch!", $time);
+        $display("**ERROR**: Time=%0t ps: Write enable mismatch!", $time);
         $display("Expected i_data_wr_reg[13]=1, Got: %b", i_data_wr_reg[13]);
       end else begin
         enable_pass_count = enable_pass_count + 1;
@@ -256,15 +266,17 @@ module pip_tb();
       check_output(iv_data_reg[13]);
     end
     // 如果普通报文则先不考虑
-    // else if (i_data_wr_reg[13] === 1'b1) begin
-    //   enable_error_count = enable_error_count + 1;
-    //   $display("**ERROR**: Time=%0t ns: Missing output data!", $time);
-    // end
+    else if (i_data_wr_reg[13] === 1'b1) begin
+      if (is_tsmp == 1'b1) begin
+        enable_error_count = enable_error_count + 1;
+        $display("**ERROR**: Time=%0t ps: Missing output data!", $time);
+      end
+    end
   end
 
   // 在仿真结束时输出总结
   initial begin
-    #(CLK_PERIOD*500);  // 等待仿真结束
+    #(CLK_PERIOD*400);  // 等待仿真结束
     $display("\n----------------------------------------");
     $display("Simulation Summary:");
     $display("Data Check Results:");
