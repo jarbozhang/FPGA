@@ -1,27 +1,33 @@
 `timescale 1ps/1ps
 
+// 此test bench是对pip模块进行的测试梳理
+// Quartus中的此test bench运行时间建议设置为10ns
 module pip_tb();
 
-  parameter DATA_WIDTH = 9;
-  parameter CLK_PERIOD = 20;
-  parameter INIT_DELAY = 18;  // 添加初始延迟参数
-  parameter MAX_SEQ_LENGTH = 64;
+  // 定义主要参数
+  parameter DATA_WIDTH = 9;        // 数据位宽
+  parameter CLK_PERIOD = 20;       // 时钟周期
+  parameter INIT_DELAY = 18;       // 初始延迟参数
 
-  parameter TSMP_TYPE_NONE = 8'hff;
-  parameter TSMP_TYPE_READ = 8'h00;
-  parameter TSMP_TYPE_WRITE = 8'h01;
-  parameter TSMP_TYPE_CONFIG = 8'h16;
+  // TSMP报文类型定义
+  parameter TSMP_TYPE_NONE = 8'hff;    // 非TSMP报文
+  parameter TSMP_TYPE_READ = 8'h00;     // TSMP读报文
+  parameter TSMP_TYPE_WRITE = 8'h01;    // TSMP写报文
+  parameter TSMP_TYPE_CONFIG = 8'h16;   // TSMP配置报文
 
-  reg i_clk;
-  reg i_rst_n;
-  reg [DATA_WIDTH-1:0] iv_data;
-  reg i_data_wr;
-  reg is_tsmp;
-  reg [7:0] tsmp_type;
-  wire [DATA_WIDTH-1:0] wv_data_pip2hcp;
-  wire w_data_wr_pip2hcp;
-  wire [DATA_WIDTH-1:0] wv_data_pip2plc;
-  wire w_data_wr_pip2plc;
+  // 输入信号定义
+  reg i_clk;                      // 时钟信号
+  reg i_rst_n;                    // 复位信号，低电平有效
+  reg [DATA_WIDTH-1:0] iv_data;   // 输入数据
+  reg i_data_wr;                  // 数据写使能
+  reg is_tsmp;                    // TSMP报文标志
+  reg [7:0] tsmp_type;            // TSMP报文类型
+
+  // 输出信号定义
+  wire [DATA_WIDTH-1:0] wv_data_pip2hcp;    // 输出到HCP的数据
+  wire w_data_wr_pip2hcp;                   // HCP数据写使能
+  wire [DATA_WIDTH-1:0] wv_data_pip2plc;    // 输出到PLC的数据
+  wire w_data_wr_pip2plc;                   // PLC数据写使能
 
   pip #(DATA_WIDTH) uut(
     .i_clk(i_clk),
@@ -39,7 +45,72 @@ module pip_tb();
     forever #(CLK_PERIOD/2) i_clk = ~i_clk;
   end
 
+  // 定义发送报文的任务
+  task send_packet;
+    input [1:0] pkt_type;    // 0:普通报文, 1:TSMP配置, 2:TSMP读, 3:TSMP写
+    input [7:0] delay;       // 发送前等待的时钟周期数
+    
+    begin
+        #(delay*CLK_PERIOD);
+        
+        i_data_wr <= 1'b1;
+        iv_data <= 9'h101;
+        #(CLK_PERIOD);
+        
+        case(pkt_type)
+            2'd0: iv_data <= 9'h016;    // 普通报文
+            2'd1: iv_data <= 9'h016;    // TSMP配置
+            2'd2: iv_data <= 9'h000;    // TSMP读
+            2'd3: iv_data <= 9'h001;    // TSMP写
+        endcase
+        #(CLK_PERIOD);
+        
+        // 填充0
+        repeat(pkt_type == 0 ? 7 : 10) begin
+            iv_data <= 9'h000;
+            #(CLK_PERIOD);
+        end
+        
+        // TSMP特有字段
+        if (pkt_type != 0) begin
+            iv_data <= 9'h0ff;
+            #(CLK_PERIOD);
+            iv_data <= 9'h001;
+            #(CLK_PERIOD);
+        end
+        
+        // 设置TSMP标志
+        is_tsmp <= (pkt_type != 0);
+        case(pkt_type)
+            2'd1: tsmp_type <= TSMP_TYPE_CONFIG;
+            2'd2: tsmp_type <= TSMP_TYPE_READ;
+            2'd3: tsmp_type <= TSMP_TYPE_WRITE;
+            default: tsmp_type <= TSMP_TYPE_NONE;
+        endcase
+        
+        // 通用头部结束
+        repeat(3) begin
+            iv_data <= 9'h000;
+            #(CLK_PERIOD);
+        end
+        
+        // payload部分
+        iv_data <= 9'h000;
+        #(CLK_PERIOD);
+        iv_data <= 9'h001;
+        #(CLK_PERIOD);
+        repeat(64) begin
+            iv_data <= iv_data + 1;
+            #(CLK_PERIOD);
+        end
+        iv_data <= 9'h100;
+        #(CLK_PERIOD);
+        i_data_wr <= 1'b0;
+    end
+  endtask
+
   initial begin
+    // 初始化
     i_rst_n <= 1'b0;
     i_data_wr <= 1'b0;
     iv_data <= {DATA_WIDTH{1'b0}};
@@ -47,176 +118,24 @@ module pip_tb();
     tsmp_type <= TSMP_TYPE_NONE;
     #(CLK_PERIOD) i_rst_n <= 1'b1;
     
-    // 等待INIT_DELAY个时钟周期
     #(INIT_DELAY*CLK_PERIOD);
 
+    // 发送四个报文
+    send_packet(1, 0);       // 第一个TSMP配置报文
+    send_packet(0, 5);       // 第二个普通报文，延迟5拍
+    send_packet(2, 0);       // 第三个TSMP读报文，紧接着发送
+    send_packet(3, 13);      // 第四个TSMP写报文，延迟13拍，模拟寄存器最后一位输出的同时，有新的一拍进来的情况
 
-    // 第一个报文
-    // 模拟TSMP报文
-    i_data_wr <= 1'b1;
-    iv_data <= 9'h101; 
-    #(CLK_PERIOD);
-    iv_data <= 9'h016; 
-    #(CLK_PERIOD);
-    repeat(10) begin
-        iv_data <= 9'h000; 
-        #(CLK_PERIOD);
-    end
-    iv_data <= 9'h0ff; 
-    #(CLK_PERIOD);
-    iv_data <= 9'h001; 
-    is_tsmp <= 1'b1;
-    tsmp_type <= TSMP_TYPE_CONFIG;
-    #(CLK_PERIOD);
-    iv_data <= 9'h000;
-    #(CLK_PERIOD);
-    iv_data <= 9'h000;
-    #(CLK_PERIOD);
-
-    // payload
-    iv_data <= 9'h000;
-    #(CLK_PERIOD);
-    iv_data <= 9'h001;
-    #(CLK_PERIOD);
-    repeat(64) begin
-        iv_data <= iv_data + 1; 
-        #(CLK_PERIOD);
-    end
-    iv_data <= 9'h100;
-    #(CLK_PERIOD);
-    i_data_wr <= 1'b0;
-
-    #(5*CLK_PERIOD);
-
-    // 第二个普通报文，和第一个报文相差5拍
-    // 模拟非TSMP报文
-    i_data_wr <= 1'b1;
-    iv_data <= 9'h101; 
-    #(CLK_PERIOD);
-    iv_data <= 9'h016; 
-    #(CLK_PERIOD);
-    repeat(7) begin
-        iv_data <= 9'h000; 
-        #(CLK_PERIOD);
-    end
-    is_tsmp <= 1'b0;
-    tsmp_type <= TSMP_TYPE_CONFIG;
-    repeat(3) begin
-        iv_data <= 9'h000; 
-        #(CLK_PERIOD);
-    end
-    iv_data <= 9'h0f1; 
-    #(CLK_PERIOD);
-    iv_data <= 9'h000; 
-    #(CLK_PERIOD);
-    iv_data <= 9'h000;
-    #(CLK_PERIOD);
-    iv_data <= 9'h000;
-    #(CLK_PERIOD);
-
-    // payload
-    iv_data <= 9'h000;
-    #(CLK_PERIOD);
-    iv_data <= 9'h001;
-    #(CLK_PERIOD);
-    repeat(64) begin
-        iv_data <= iv_data + 1; 
-        #(CLK_PERIOD);
-    end
-    iv_data <= 9'h100;
-    #(CLK_PERIOD);
-    i_data_wr <= 1'b0;
-    
-
-
-
-
-
-     // 第三个TSMP报文，紧接着第二个报文
-    i_data_wr <= 1'b1;
-    iv_data <= 9'h101; 
-    #(CLK_PERIOD);
-    iv_data <= 9'h000; //读报文
-    #(CLK_PERIOD);
-    repeat(10) begin
-        iv_data <= 9'h000; 
-        #(CLK_PERIOD);
-    end
-    iv_data <= 9'h0ff; 
-    #(CLK_PERIOD);
-    iv_data <= 9'h001; 
-    #(CLK_PERIOD);
-    is_tsmp <= 1'b1;
-    tsmp_type <= TSMP_TYPE_READ;
-    iv_data <= 9'h000;
-    #(CLK_PERIOD);
-    iv_data <= 9'h000;
-    #(CLK_PERIOD);
-
-    // payload
-    iv_data <= 9'h000;
-    #(CLK_PERIOD);
-    iv_data <= 9'h001;
-    #(CLK_PERIOD);
-    repeat(64) begin
-        iv_data <= iv_data + 1; 
-        #(CLK_PERIOD);
-    end
-    iv_data <= 9'h100;
-    #(CLK_PERIOD);
-    i_data_wr <= 1'b0; 
-
-
-
-
-
-
-
-    // 第四个TSMP报文，和第三个报文相差13拍
-    #(CLK_PERIOD*13);
-    i_data_wr <= 1'b1;
-    iv_data <= 9'h101; 
-    #(CLK_PERIOD);
-    iv_data <= 9'h001; 
-    #(CLK_PERIOD);
-    repeat(10) begin
-        iv_data <= 9'h000; 
-        #(CLK_PERIOD);
-    end
-    iv_data <= 9'h0ff; 
-    #(CLK_PERIOD);
-    iv_data <= 9'h001; 
-    is_tsmp <= 1'b1;
-    tsmp_type <= TSMP_TYPE_WRITE;
-    #(CLK_PERIOD);
-    iv_data <= 9'h000;
-    #(CLK_PERIOD);
-    iv_data <= 9'h000;
-    #(CLK_PERIOD);
-
-    // payload
-    iv_data <= 9'h000;
-    #(CLK_PERIOD);
-    iv_data <= 9'h001;
-    #(CLK_PERIOD);
-    repeat(64) begin
-        iv_data <= iv_data + 1; 
-        #(CLK_PERIOD);
-    end
-    iv_data <= 9'h100;
-    #(CLK_PERIOD);
-    i_data_wr <= 1'b0;  
-  
     // 仿真结束等待
     #(CLK_PERIOD*20);
     // $finish;
   end
 
-  // 添加计数器
-  integer pass_count;
-  integer error_count;
-  integer enable_pass_count;
-  integer enable_error_count;
+  // 性能统计计数器
+  integer pass_count;             // 数据检查通过计数
+  integer error_count;            // 数据检查错误计数
+  integer enable_pass_count;      // 使能信号检查通过计数
+  integer enable_error_count;     // 使能信号检查错误计数
 
   // 初始化计数器
   initial begin
@@ -255,9 +174,9 @@ module pip_tb();
     end
   endtask
 
-  // 添加寄存器声明
-  reg [DATA_WIDTH-1:0] iv_data_reg[13:0];  // 数据历史
-  reg i_data_wr_reg[13:0];                 // 写使能历史
+  // 数据历史记录寄存器
+  reg [DATA_WIDTH-1:0] iv_data_reg[13:0];   // 存储最近14拍的数据历史
+  reg i_data_wr_reg[13:0];                  // 存储最近14拍的写使能历史
   integer i;
 
   // 在每个时钟上升沿记录iv_data和i_data_wr的历史值
