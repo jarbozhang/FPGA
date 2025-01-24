@@ -7,9 +7,9 @@ module pip_tb();
   parameter INIT_DELAY = 18;  // 添加初始延迟参数
   parameter MAX_SEQ_LENGTH = 64;
 
-  parameter TSMP_TYPE_NONE = 8'h00;
-  parameter TSMP_TYPE_READ = 8'h01;
-  parameter TSMP_TYPE_WRITE = 8'h02;
+  parameter TSMP_TYPE_NONE = 8'hff;
+  parameter TSMP_TYPE_READ = 8'h00;
+  parameter TSMP_TYPE_WRITE = 8'h01;
   parameter TSMP_TYPE_CONFIG = 8'h16;
 
   reg i_clk;
@@ -86,9 +86,9 @@ module pip_tb();
     #(CLK_PERIOD);
     i_data_wr <= 1'b0;
 
-    #(5*CLK_PERIOD);// 第二个普通报文，和第一个报文相差5拍
+    #(5*CLK_PERIOD);
 
-    
+    // 第二个普通报文，和第一个报文相差5拍
     // 模拟非TSMP报文
     i_data_wr <= 1'b1;
     iv_data <= 9'h101; 
@@ -100,7 +100,7 @@ module pip_tb();
         #(CLK_PERIOD);
     end
     is_tsmp <= 1'b0;
-    tsmp_type <= TSMP_TYPE_NONE;
+    tsmp_type <= TSMP_TYPE_CONFIG;
     repeat(3) begin
         iv_data <= 9'h000; 
         #(CLK_PERIOD);
@@ -177,7 +177,7 @@ module pip_tb();
     i_data_wr <= 1'b1;
     iv_data <= 9'h101; 
     #(CLK_PERIOD);
-    iv_data <= 9'h016; 
+    iv_data <= 9'h001; 
     #(CLK_PERIOD);
     repeat(10) begin
         iv_data <= 9'h000; 
@@ -187,7 +187,7 @@ module pip_tb();
     #(CLK_PERIOD);
     iv_data <= 9'h001; 
     is_tsmp <= 1'b1;
-    tsmp_type <= TSMP_TYPE_CONFIG;
+    tsmp_type <= TSMP_TYPE_WRITE;
     #(CLK_PERIOD);
     iv_data <= 9'h000;
     #(CLK_PERIOD);
@@ -289,7 +289,7 @@ module pip_tb();
         enable_error_count = enable_error_count + 1;
         $display("**ERROR**: Time=%0t ps: Write enable mismatch!", $time);
         $display("Expected i_data_wr_reg[13]=1, Got: %b", i_data_wr_reg[13]);
-      end else if (tsmp_type !== TSMP_TYPE_CONFIG) begin
+      end else if (tsmp_type !==  TSMP_TYPE_READ && tsmp_type !== TSMP_TYPE_WRITE) begin
         enable_error_count = enable_error_count + 1;
         $display("**ERROR**: Time=%0t ps: TSMP type mismatch!", $time);
         $display("Expected tsmp_type=TSMP_TYPE_CONFIG, Got: %h", tsmp_type);
@@ -305,7 +305,7 @@ module pip_tb();
         enable_error_count = enable_error_count + 1;
         $display("**ERROR**: Time=%0t ps: Write enable mismatch!", $time);
         $display("Expected i_data_wr_reg[13]=1, Got: %b", i_data_wr_reg[13]);
-      end else if (tsmp_type !== TSMP_TYPE_READ && tsmp_type !== TSMP_TYPE_WRITE) begin
+      end else if (tsmp_type !== TSMP_TYPE_CONFIG) begin
         enable_error_count = enable_error_count + 1;
         $display("**ERROR**: Time=%0t ps: TSMP type mismatch!", $time);
         $display("Expected tsmp_type=TSMP_TYPE_READ or TSMP_TYPE_WRITE, Got: %h", tsmp_type);

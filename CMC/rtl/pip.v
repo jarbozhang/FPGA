@@ -40,7 +40,7 @@ always @(posedge i_clk or negedge i_rst_n) begin
         shift_reg <= {(CHECK_HEAD_LENGTH-1)*DATA_WIDTH{1'b0}};
         check_head_counter_reg <= 4'd0;
         check_type_reg <= TSMP_TYPE_NONE;
-        check_is_tsmp_reg <= 1'b0;
+        check_is_tsmp_reg <= 0;
     end else begin
         case (st_current)
             IDLE_S: begin
@@ -54,7 +54,7 @@ always @(posedge i_clk or negedge i_rst_n) begin
                     shift_reg <= {(CHECK_HEAD_LENGTH-1)*DATA_WIDTH{1'b0}};
                     check_head_counter_reg <= 4'd0;
                     check_type_reg <= TSMP_TYPE_NONE;
-                    check_is_tsmp_reg <= 1'b0;
+                    check_is_tsmp_reg <= 0;
                 end
             end
             CHECK_S: begin
@@ -68,7 +68,7 @@ always @(posedge i_clk or negedge i_rst_n) begin
                     check_type_reg <= shift_reg[((CHECK_HEAD_LENGTH-2)*DATA_WIDTH-1):(CHECK_HEAD_LENGTH-3)*DATA_WIDTH]; //由于是提前一拍跳转，所以需要判断shift_reg的最左侧2-3个byte，来判断TSMP报文的类型
                     ov_data_reg <= shift_reg[(CHECK_HEAD_LENGTH-1)*DATA_WIDTH-1:(CHECK_HEAD_LENGTH-2)*DATA_WIDTH];
                     if (shift_reg[DATA_WIDTH-1:0] == 9'h0ff && iv_data[DATA_WIDTH-1:0] == 9'h001) begin // 提前一拍跳转，所以需要判断当前iv_data是否为9'h001,来判断是否为TSMP报文
-                        check_is_tsmp_reg <= 1'b1;
+                        check_is_tsmp_reg <= 1;
                         o_data_wr_reg <= 1'b1;
                     end 
                 end
@@ -76,7 +76,7 @@ always @(posedge i_clk or negedge i_rst_n) begin
             TRANS_S: begin
                 shift_reg <= {shift_reg[((CHECK_HEAD_LENGTH-1)*DATA_WIDTH-1):0], iv_data};
                 ov_data_reg <= shift_reg[(CHECK_HEAD_LENGTH-1)*DATA_WIDTH-1:(CHECK_HEAD_LENGTH-2)*DATA_WIDTH];
-                if (check_is_tsmp_reg == 1'b1) begin
+                if (check_is_tsmp_reg == 1) begin
                     o_data_wr_reg <= 1'b1;
                 end
                 if (iv_data[DATA_WIDTH-1] == 1'b1) begin
@@ -88,7 +88,7 @@ always @(posedge i_clk or negedge i_rst_n) begin
             TAIL_S: begin
                 shift_reg <= {shift_reg[((CHECK_HEAD_LENGTH-1)*DATA_WIDTH-1):0], iv_data};
                 ov_data_reg <= shift_reg[(CHECK_HEAD_LENGTH-1)*DATA_WIDTH-1:(CHECK_HEAD_LENGTH-2)*DATA_WIDTH];
-                if (check_is_tsmp_reg == 1'b1) begin
+                if (check_is_tsmp_reg == 1) begin
                     o_data_wr_reg <= 1'b1;
                 end
                 if (check_head_counter_reg > 0) begin
@@ -99,13 +99,13 @@ always @(posedge i_clk or negedge i_rst_n) begin
                 // 此时开始通过这一拍决定跳转到哪个状态
                 if (ov_data_reg[DATA_WIDTH-1] == 1'b1) begin
                     o_data_wr_reg <= 1'b0;
-                    check_is_tsmp_reg <= 1'b0;
+                    check_is_tsmp_reg <= 0;
                     // 如果check_head_counter_reg > 0，则说明shift_reg缓冲区中同时存在前后两个报文(可能紧挨，可能中间间隔几拍)
                     if (check_head_counter_reg > 0) begin
                         st_current <= CHECK_S;
                         // shift_reg中如果最右侧的值是9'h0ff，同时iv_data的值是9'h001，则说明是TSMP报文，同时两个报文中间没有间隔
                         if (shift_reg[DATA_WIDTH-1:0] == 9'h0ff && iv_data[DATA_WIDTH-1:0] == 9'h001) begin
-                            check_is_tsmp_reg <= 0'b1;
+                            check_is_tsmp_reg <= 1;
                             o_data_wr_reg <= 1'b1;
                             check_type_reg <= shift_reg[((CHECK_HEAD_LENGTH-2)*DATA_WIDTH-1):(CHECK_HEAD_LENGTH-3)*DATA_WIDTH]; 
                             st_current <= TRANS_S;
@@ -130,8 +130,8 @@ always @(posedge i_clk or negedge i_rst_n) begin
 end
 
 assign wv_data_pip2hcp = check_is_tsmp_reg ? ov_data_reg : 9'h000;
-assign w_data_wr_pip2hcp = o_data_wr_reg && check_type_reg == TSMP_TYPE_CONFIG;
+assign w_data_wr_pip2hcp = o_data_wr_reg && (check_type_reg == TSMP_TYPE_READ || check_type_reg == TSMP_TYPE_WRITE);
 assign wv_data_pip2plc = check_is_tsmp_reg ? ov_data_reg : 9'h000;
-assign w_data_wr_pip2plc = o_data_wr_reg && (check_type_reg == TSMP_TYPE_READ || check_type_reg == TSMP_TYPE_WRITE);
+assign w_data_wr_pip2plc = o_data_wr_reg && check_type_reg == TSMP_TYPE_CONFIG;
 
 endmodule
