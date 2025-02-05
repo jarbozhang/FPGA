@@ -3,10 +3,10 @@ module pip #(parameter DATA_WIDTH = 9)(
     input wire i_rst_n,
     input wire [DATA_WIDTH-1:0] iv_data,
     input wire i_data_wr,
-    output wire [DATA_WIDTH-1:0] wv_data_pip2hcp,
-    output wire w_data_wr_pip2hcp,
-    output wire [DATA_WIDTH-1:0] wv_data_pip2plc,
-    output wire w_data_wr_pip2plc
+    output wire [DATA_WIDTH-1:0] ov_data_hcp,
+    output wire o_data_wr_hcp,
+    output wire [DATA_WIDTH-1:0] ov_data_plc,
+    output wire o_data_wr_plc
 );
 
 
@@ -129,9 +129,9 @@ always @(posedge i_clk or negedge i_rst_n) begin
     end
 end
 
-assign wv_data_pip2hcp = check_is_tsmp_reg ? ov_data_reg : 9'h000;
-assign w_data_wr_pip2hcp = o_data_wr_reg && (check_type_reg == TSMP_TYPE_READ || check_type_reg == TSMP_TYPE_WRITE);
-assign wv_data_pip2plc = check_is_tsmp_reg ? ov_data_reg : 9'h000;
-assign w_data_wr_pip2plc = o_data_wr_reg && check_type_reg == TSMP_TYPE_CONFIG;
+assign ov_data_hcp = check_is_tsmp_reg ? ov_data_reg : 9'h000;
+assign o_data_wr_hcp = o_data_wr_reg && (check_type_reg == TSMP_TYPE_READ || check_type_reg == TSMP_TYPE_WRITE);
+assign ov_data_plc = check_is_tsmp_reg ? ov_data_reg : 9'h000;
+assign o_data_wr_plc = o_data_wr_reg && check_type_reg == TSMP_TYPE_CONFIG;
 
 endmodule

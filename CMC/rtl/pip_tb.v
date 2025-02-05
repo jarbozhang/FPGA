@@ -1,13 +1,16 @@
 `timescale 1ps/1ps
 
+
 // 此test bench是对pip模块进行的测试梳理
 // Quartus中的此test bench运行时间建议设置为10ns
+// 更新modelsim.ini文件中的RunLength = 10000 (此时modelsim在每次restart之后，run的时间为10ns)
 module pip_tb();
 
   // 定义主要参数
   parameter DATA_WIDTH = 9;        // 数据位宽
   parameter CLK_PERIOD = 20;       // 时钟周期
   parameter INIT_DELAY = 18;       // 初始延迟参数
+  parameter DELAY_COUNT = 14;     // 从第一拍开始到开始拉高使能信号之间需要间隔多少拍
 
   // TSMP报文类型定义
   parameter TSMP_TYPE_NONE = 8'hff;    // 非TSMP报文
@@ -24,20 +27,20 @@ module pip_tb();
   reg [7:0] tsmp_type;            // TSMP报文类型
 
   // 输出信号定义
-  wire [DATA_WIDTH-1:0] wv_data_pip2hcp;    // 输出到HCP的数据
-  wire w_data_wr_pip2hcp;                   // HCP数据写使能
-  wire [DATA_WIDTH-1:0] wv_data_pip2plc;    // 输出到PLC的数据
-  wire w_data_wr_pip2plc;                   // PLC数据写使能
+  wire [DATA_WIDTH-1:0] ov_data_hcp;    // 输出到HCP的数据
+  wire o_data_wr_hcp;                   // HCP数据写使能
+  wire [DATA_WIDTH-1:0] ov_data_plc;    // 输出到PLC的数据
+  wire o_data_wr_plc;                   // PLC数据写使能
 
   pip #(DATA_WIDTH) uut(
     .i_clk(i_clk),
     .i_rst_n(i_rst_n),
     .iv_data(iv_data),
     .i_data_wr(i_data_wr),
-    .wv_data_pip2hcp(wv_data_pip2hcp),
-    .w_data_wr_pip2hcp(w_data_wr_pip2hcp),
-    .wv_data_pip2plc(wv_data_pip2plc),
-    .w_data_wr_pip2plc(w_data_wr_pip2plc)
+    .ov_data_hcp(ov_data_hcp),
+    .o_data_wr_hcp(o_data_wr_hcp),
+    .ov_data_plc(ov_data_plc),
+    .o_data_wr_plc(o_data_wr_plc)
   );
 
   initial begin
@@ -78,6 +81,11 @@ module pip_tb();
             iv_data <= 9'h001;
             #(CLK_PERIOD);
         end
+
+        repeat(DELAY_COUNT-14) begin
+            iv_data <= 9'h000;
+            #(CLK_PERIOD);
+        end
         
         // 设置TSMP标志
         is_tsmp <= (pkt_type != 0);
@@ -89,7 +97,7 @@ module pip_tb();
         endcase
         
         // 通用头部结束
-        repeat(3) begin
+        repeat(17-DELAY_COUNT) begin
             iv_data <= 9'h000;
             #(CLK_PERIOD);
         end
@@ -124,7 +132,7 @@ module pip_tb();
     send_packet(1, 0);       // 第一个TSMP配置报文
     send_packet(0, 5);       // 第二个普通报文，延迟5拍
     send_packet(2, 0);       // 第三个TSMP读报文，紧接着发送
-    send_packet(3, 13);      // 第四个TSMP写报文，延迟13拍，模拟寄存器最后一位输出的同时，有新的一拍进来的情况
+    send_packet(3, DELAY_COUNT-1);      // 第四个TSMP写报文，延迟DELAY_COUNT-1拍，模拟寄存器最后一位输出的同时，有新的一拍进来的情况
 
     // 仿真结束等待
     #(CLK_PERIOD*20);
@@ -151,23 +159,23 @@ module pip_tb();
     begin
       case(port_sel)
         0: begin  // 检查pip2hcp输出
-          if (wv_data_pip2hcp !== expected_data) begin
+          if (ov_data_hcp !== expected_data) begin
             error_count = error_count + 1;
             $display("**ERROR**: Time=%0t ps: HCP Output data mismatch!", $time);
-            $display("Expected: %h, Got: %h", expected_data, wv_data_pip2hcp);
+            $display("Expected: %h, Got: %h", expected_data, ov_data_hcp);
           end else begin
             pass_count = pass_count + 1;
-            $display("PASS: Time=%0t ps: HCP Output data match. Data=%h", $time, wv_data_pip2hcp);
+            $display("PASS: Time=%0t ps: HCP Output data match. Data=%h", $time, ov_data_hcp);
           end
         end
         1: begin  // 检查pip2plc输出
-          if (wv_data_pip2plc !== expected_data) begin
+          if (ov_data_plc !== expected_data) begin
             error_count = error_count + 1;
             $display("**ERROR**: Time=%0t ps: PLC Output data mismatch!", $time);
-            $display("Expected: %h, Got: %h", expected_data, wv_data_pip2plc);
+            $display("Expected: %h, Got: %h", expected_data, ov_data_plc);
           end else begin
             pass_count = pass_count + 1;
-            $display("PASS: Time=%0t ps: PLC Output data match. Data=%h", $time, wv_data_pip2plc);
+            $display("PASS: Time=%0t ps: PLC Output data match. Data=%h", $time, ov_data_plc);
           end
         end
       endcase
@@ -175,21 +183,21 @@ module pip_tb();
   endtask
 
   // 数据历史记录寄存器
-  reg [DATA_WIDTH-1:0] iv_data_reg[13:0];   // 存储最近14拍的数据历史
-  reg i_data_wr_reg[13:0];                  // 存储最近14拍的写使能历史
+  reg [DATA_WIDTH-1:0] iv_data_reg[DELAY_COUNT-1:0];   // 存储最近DELAY_COUNT拍的数据历史
+  reg i_data_wr_reg[DELAY_COUNT-1:0];                  // 存储最近DELAY_COUNT拍的写使能历史
   integer i;
 
   // 在每个时钟上升沿记录iv_data和i_data_wr的历史值
   always @(posedge i_clk) begin
     if (!i_rst_n) begin
-      for (i = 0; i < 14; i = i + 1) begin
+      for (i = 0; i < DELAY_COUNT; i = i + 1) begin
         iv_data_reg[i] <= 0;
         i_data_wr_reg[i] <= 0;
       end
     end
     else begin
       // 移位操作
-      for (i = 13; i > 0; i = i - 1) begin
+      for (i = DELAY_COUNT-1; i > 0; i = i - 1) begin
         iv_data_reg[i] <= iv_data_reg[i-1];
         i_data_wr_reg[i] <= i_data_wr_reg[i-1];
       end
@@ -202,12 +210,12 @@ module pip_tb();
   always @(posedge i_clk) begin
     if (!i_rst_n) begin
     end
-    else if (w_data_wr_pip2hcp) begin
+    else if (o_data_wr_hcp) begin
       // 检查写使能信号是否对应
-      if (i_data_wr_reg[13] !== 1'b1) begin
+      if (i_data_wr_reg[DELAY_COUNT-1] !== 1'b1) begin
         enable_error_count = enable_error_count + 1;
         $display("**ERROR**: Time=%0t ps: Write enable mismatch!", $time);
-        $display("Expected i_data_wr_reg[13]=1, Got: %b", i_data_wr_reg[13]);
+        $display("Expected i_data_wr_reg[DELAY_COUNT-1]=1, Got: %b", i_data_wr_reg[DELAY_COUNT-1]);
       end else if (tsmp_type !==  TSMP_TYPE_READ && tsmp_type !== TSMP_TYPE_WRITE) begin
         enable_error_count = enable_error_count + 1;
         $display("**ERROR**: Time=%0t ps: TSMP type mismatch!", $time);
@@ -216,14 +224,14 @@ module pip_tb();
         enable_pass_count = enable_pass_count + 1;
       end
       // 检查数据值
-      check_output(iv_data_reg[13], 0);
+      check_output(iv_data_reg[DELAY_COUNT-1], 0);
     end
-    else if (w_data_wr_pip2plc) begin
+    else if (o_data_wr_plc) begin
       // 检查写使能信号是否对应
-      if (i_data_wr_reg[13] !== 1'b1) begin
+      if (i_data_wr_reg[DELAY_COUNT-1] !== 1'b1) begin
         enable_error_count = enable_error_count + 1;
         $display("**ERROR**: Time=%0t ps: Write enable mismatch!", $time);
-        $display("Expected i_data_wr_reg[13]=1, Got: %b", i_data_wr_reg[13]);
+        $display("Expected i_data_wr_reg[DELAY_COUNT-1]=1, Got: %b", i_data_wr_reg[DELAY_COUNT-1]);
       end else if (tsmp_type !== TSMP_TYPE_CONFIG) begin
         enable_error_count = enable_error_count + 1;
         $display("**ERROR**: Time=%0t ps: TSMP type mismatch!", $time);
@@ -232,10 +240,10 @@ module pip_tb();
         enable_pass_count = enable_pass_count + 1;
       end
       // 检查数据值
-      check_output(iv_data_reg[13], 1);
+      check_output(iv_data_reg[DELAY_COUNT-1], 1);
     end
     // 如果普通报文则先不考虑
-    else if (i_data_wr_reg[13] === 1'b1) begin
+    else if (i_data_wr_reg[DELAY_COUNT-1] === 1'b1) begin
       if (is_tsmp == 1'b1) begin
         enable_error_count = enable_error_count + 1;
         $display("**ERROR**: Time=%0t ps: Missing output data!", $time);
