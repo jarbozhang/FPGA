@@ -17,10 +17,10 @@ $global:config = @{
 $env:Path += ";C:\Modelsim_win64_SE_10.5_and_crack\win64"
 
 # 设置输出编码
-$PSDefaultParameterValues['*:Encoding'] = 'utf8'
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$OutputEncoding = [System.Text.Encoding]::UTF8
-chcp 65001
+#$PSDefaultParameterValues['*:Encoding'] = 'utf8'
+#[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+#$OutputEncoding = [System.Text.Encoding]::UTF8
+#chcp 65001
 
 # 设置ModelSim路径
 $modelsimPath = $config.ModelSimPath
@@ -42,7 +42,7 @@ foreach ($file in $filePaths) {
 # ModelSim执行命令 - 使用Start-Process来执行
 $vsimPath = Join-Path $modelsimPath "vsim.exe"
 
-Write-Host "开始监视以下文件:"
+Write-Host "---Start monitoring the following files:---"
 $filePaths | ForEach-Object { Write-Host "- $_" }
 
 while ($true) {
@@ -52,7 +52,7 @@ while ($true) {
     foreach ($file in $filePaths) {
         $currentWrite = (Get-Item $file).LastWriteTime
         if ($currentWrite -ne $lastWrites[$file]) {
-            Write-Host "检测到文件更改: $file"
+            Write-Host "---Detected file change: $file---"
             $lastWrites[$file] = $currentWrite
             $needsRerun = $true
         }
@@ -60,16 +60,16 @@ while ($true) {
     
     # 如果有任何文件更改，则重新运行仿真
     if ($needsRerun) {
-        Write-Host "重新运行仿真..."
+        Write-Host "---Re-running simulation...---"
         # 切换到工作目录
         Set-Location -Path $config.ProjectRoot
         
         # 新增：关闭现有ModelSim进程
         try {
             Get-Process vsim -ErrorAction SilentlyContinue | Stop-Process -Force
-            Write-Host "已关闭现有ModelSim进程"
+            Write-Host "---Closed existing ModelSim process---"
         } catch {
-            Write-Host "没有找到正在运行的ModelSim进程"
+            Write-Host "---No running ModelSim process found---"
         }
 
         # 使用Start-Process执行ModelSim命令
