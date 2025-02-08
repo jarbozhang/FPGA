@@ -32,9 +32,7 @@ module hcp_tb();
   wire [DATA_WIDTH-1:0] ov_data_plc;    // 输出到PLC的数据
   wire o_data_wr_plc;                   // PLC数据写使能
 
-
-  // 输出信号定义
-
+  // 修改UUT实例化
   hcp #(DATA_WIDTH) uut(
     .i_clk(i_clk),
     .i_rst_n(i_rst_n),
@@ -131,9 +129,9 @@ module hcp_tb();
     #(INIT_DELAY*CLK_PERIOD);
 
     // 发送四个报文
-    send_packet(3, 0);       // 第一个TSMP配置报文
-    send_packet(3, 0);       // 第二个TSMP读报文，紧接着发送
-    send_packet(3, DELAY_COUNT-1);      // 第三个TSMP写报文，延迟DELAY_COUNT-1拍，模拟寄存器最后一位输出的同时，有新的一拍进来的情况
+    send_packet(3, 0);       // 第一个TSMP写报文
+    send_packet(2, 0);       // 第二个TSMP读报文，紧接着发送
+    // send_packet(3, DELAY_COUNT-1);      // 第三个TSMP写报文，延迟DELAY_COUNT-1拍，模拟寄存器最后一位输出的同时，有新的一拍进来的情况
 
     // 仿真结束等待
     #(CLK_PERIOD*20);
