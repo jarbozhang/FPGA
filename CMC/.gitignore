@@ -4,6 +4,7 @@
 /output_files/
 /simulation/
 /timing/
+/greybox_tmp/
 *.qpf
 *.qsf
 *.qws

@@ -6,7 +6,7 @@ param(
 $global:config = @{
     ModelSimPath = "C:\Modelsim_win64_SE_10.5_and_crack\win64"
     ProjectRoot = "C:\Users\OS\Documents\Develop\bfelab\FPGA\CMC"
-    DoFilePath = "simulation/modelsim/CMC_run_msim_rtl_verilog.do"
+    DoFilePath = "scripts\run_simulation.do"
     WatchFolders = @(
         "rtl"
     )
@@ -77,9 +77,7 @@ while ($true) {
         if ($CLIMode) {
             $simArgs = @("-c") + $simArgs
         }
-        Write-Host "filepath: $vsimPath"
-        Write-Host "simArgs: $simArgs"
-        Start-Process -FilePath $vsimPath -ArgumentList $simArgs -NoNewWindow -Wait
+        Start-Process -FilePath $vsimPath -ArgumentList $simArgs -NoNewWindow 
     }
     
     Start-Sleep -Seconds 1
